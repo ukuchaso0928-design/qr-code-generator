@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>QRコード作成アプリ</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>QRコード作成アプリ</h1>
+            <p>IDを入力してQRコードを生成しましょう</p>
+        </header>
+        
+        <main>
+            <!-- タブ切り替え -->
+            <div class="tab-container">
+                <button class="tab-btn active" data-tab="single">単一ID</button>
+                <button class="tab-btn" data-tab="batch">一括処理</button>
+            </div>
+            
+            <!-- 単一ID処理 -->
+            <div class="tab-content active" id="single-tab">
+                <div class="input-section">
+                    <div class="input-group">
+                        <label for="idInput">IDを入力してください:</label>
+                        <input type="text" id="idInput" placeholder="例: USER001, EMPLOYEE123" maxlength="50">
+                    </div>
+                    <button id="generateBtn" class="generate-btn">QRコードを生成</button>
+                </div>
+            </div>
+            
+            <!-- 一括処理 -->
+            <div class="tab-content" id="batch-tab">
+                <div class="batch-section">
+                    <div class="input-group">
+                        <label for="batchInput">複数のIDを入力してください（1行に1つ）:</label>
+                        <textarea id="batchInput" placeholder="1001&#10;1002&#10;1003&#10;..." rows="10"></textarea>
+                        <div class="file-upload-container">
+                            <input type="file" id="fileInput" accept=".txt,.csv" style="display: none;">
+                            <button id="fileUploadBtn" class="file-upload-btn">ファイルから読み込み</button>
+                            <span id="fileName" class="file-name"></span>
+                        </div>
+                    </div>
+                    <div class="batch-controls">
+                        <button id="generateBatchBtn" class="generate-btn batch-btn">一括QRコード生成</button>
+                        <button id="downloadExcelBtn" class="download-btn excel-btn" style="display: none;">エクセルファイルをダウンロード</button>
+                    </div>
+                    <div class="progress-container" id="progressContainer" style="display: none;">
+                        <div class="progress-bar">
+                            <div class="progress-fill" id="progressFill"></div>
+                        </div>
+                        <div class="progress-text" id="progressText">処理中...</div>
+                    </div>
+                    
+                    <!-- バッチ処理結果表示 -->
+                    <div class="batch-result-section" id="batchResultSection" style="display: none;">
+                        <h3>バッチ処理結果</h3>
+                        <div class="batch-summary">
+                            <p><strong>生成完了:</strong> <span id="batchCount">0</span>個のQRコード</p>
+                            <p><strong>ファイルサイズ:</strong> <span id="batchFileSize">0</span> MB</p>
+                        </div>
+                        <div class="batch-preview" id="batchPreview">
+                            <!-- 最初の数個のQRコードをプレビュー表示 -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="result-section" id="resultSection" style="display: none;">
+                <h2>生成されたQRコード</h2>
+                <div class="qr-container">
+                    <div id="qrcode"></div>
+                </div>
+                <div class="qr-info">
+                    <p><strong>ID:</strong> <span id="generatedId"></span></p>
+                    <button id="downloadBtn" class="download-btn">QRコードをダウンロード</button>
+                </div>
+            </div>
+        </main>
+        
+        <footer>
+            <p>&copy; 2024 QRコード作成アプリ</p>
+        </footer>
+    </div>
+    
+    <script>
+        // QRコードライブラリの読み込み状態
+        let qrCodeLibraryLoaded = false;
+        let currentCDNIndex = 0;
+        
+        // 複数のCDNを試すためのリスト
+        const cdnUrls = [
+            'https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js',
+            'https://unpkg.com/qrcode@1.5.3/build/qrcode.min.js',
+            'https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js',
+            'https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.min.js'
+        ];
+        
+        // QRコードライブラリの読み込み成功時の処理
+        function onQRCodeLibraryLoaded() {
+            qrCodeLibraryLoaded = true;
+            console.log('QRコードライブラリが正常に読み込まれました');
+            
+            // 利用可能なAPIを確認
+            if (typeof QRCode !== 'undefined') {
+                console.log('QRCode APIが利用可能です');
+            } else if (typeof qrcode !== 'undefined') {
+                console.log('qrcode APIが利用可能です');
+            } else {
+                console.log('QRコードAPIが見つかりません');
+            }
+        }
+        
+        // QRコードライブラリの読み込み失敗時の処理
+        function onQRCodeLibraryError() {
+            console.error(`CDN ${currentCDNIndex + 1} の読み込みに失敗しました`);
+            currentCDNIndex++;
+            
+            if (currentCDNIndex < cdnUrls.length) {
+                console.log(`次のCDNを試します: ${cdnUrls[currentCDNIndex]}`);
+                loadQRCodeLibrary();
+            } else {
+                console.error('すべてのCDNの読み込みに失敗しました');
+                qrCodeLibraryLoaded = false;
+                // エラーメッセージは script.js が読み込まれた後に表示
+                if (typeof showError === 'function') {
+                    showError('QRコードライブラリの読み込みに失敗しました。インターネット接続を確認してください。');
+                }
+            }
+        }
+        
+        // QRコードライブラリを読み込む関数
+        function loadQRCodeLibrary() {
+            const script = document.createElement('script');
+            script.src = cdnUrls[currentCDNIndex];
+            script.onload = onQRCodeLibraryLoaded;
+            script.onerror = onQRCodeLibraryError;
+            document.head.appendChild(script);
+        }
+        
+        // 最初のCDNを読み込み開始
+        loadQRCodeLibrary();
+        
+        // JSZipライブラリの読み込み状態
+        let jszipLoaded = false;
+        
+        // JSZipライブラリの読み込み成功時の処理
+        function onJSZipLoaded() {
+            jszipLoaded = true;
+            console.log('JSZipライブラリが正常に読み込まれました');
+        }
+        
+        // JSZipライブラリの読み込み失敗時の処理
+        function onJSZipError() {
+            jszipLoaded = false;
+            console.error('JSZipライブラリの読み込みに失敗しました');
+        }
+        
+        // XLSXライブラリの読み込み状態
+        let xlsxLoaded = false;
+        
+        // XLSXライブラリの読み込み成功時の処理
+        function onXLSXLoaded() {
+            xlsxLoaded = true;
+            console.log('XLSXライブラリが正常に読み込まれました');
+        }
+        
+        // XLSXライブラリの読み込み失敗時の処理
+        function onXLSXError() {
+            xlsxLoaded = false;
+            console.error('XLSXライブラリの読み込みに失敗しました');
+        }
+        
+        // ExcelJSライブラリの読み込み状態
+        let exceljsLoaded = false;
+        
+        // ExcelJSライブラリの読み込み成功時の処理
+        function onExcelJSLoaded() {
+            exceljsLoaded = true;
+            console.log('ExcelJSライブラリが正常に読み込まれました');
+        }
+        
+        // ExcelJSライブラリの読み込み失敗時の処理
+        function onExcelJSError() {
+            exceljsLoaded = false;
+            console.error('ExcelJSライブラリの読み込みに失敗しました');
+        }
+    </script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js" 
+            onload="onJSZipLoaded()" 
+            onerror="onJSZipError()"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js" 
+            onload="onXLSXLoaded()" 
+            onerror="onXLSXError()"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.3.0/exceljs.min.js" 
+            onload="onExcelJSLoaded()" 
+            onerror="onExcelJSError()"></script>
+    <script src="script.js"></script>
+</body>
+</html>
